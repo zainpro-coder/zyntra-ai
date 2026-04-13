@@ -57,7 +57,7 @@ if prompt:
     else:
         # Connect to Gemini
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        model = genai.GenerativeModel("gemini-1.5-flash")
+      model = genai.GenerativeModel("gemini-pro")
         response = model.generate_content(prompt)
         
         # Display response
