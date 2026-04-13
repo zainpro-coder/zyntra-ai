@@ -1,6 +1,18 @@
 import streamlit as st
 import google.generativeai as genai
 from datetime import datetime
+from PIL import Image # This is new!
+
+# 1. SETUP & LOGO
+# This tells the browser to look for a file named "logo.png"
+st.set_page_config(page_title="Zyntra AI", page_icon="logo.png", layout="centered")
+
+# This puts the logo at the top of your site
+try:
+    img = Image.open("logo.png")
+    st.image(img, width=200) 
+except:
+    st.title("🧘 Zyntra") # This shows if you haven't uploaded logo.png yet
 
 # 1. SETUP
 st.set_page_config(page_title="Zyntra AI", page_icon="🧘")
