@@ -12,10 +12,10 @@ try:
     img = Image.open("logo.png")
     st.image(img, width=200) 
 except:
-    st.title("🧘 Zyntra") # This shows if you haven't uploaded logo.png yet
+    st.title("Zyntra") # This shows if you haven't uploaded logo.png yet
 
 # 1. SETUP
-st.set_page_config(page_title="Zyntra AI", page_icon="🧘")
+st.set_page_config(page_title="Zyntra AI", page_icon="[/..\]")
 
 # 2. GOOGLE AI CONFIG
 # Make sure you added GOOGLE_API_KEY in Streamlit 'Secrets'
@@ -26,48 +26,47 @@ else:
     st.stop()
 
 # 3. ACCESS CONTROL
+# --- 3. ACCESS CONTROL (Free vs Paid) ---
+if "usage_count" not in st.session_state:
+    st.session_state.usage_count = 0
 if "is_paid" not in st.session_state:
     st.session_state.is_paid = False
 
-# --- FRONT PAGE ---
-if not st.session_state.is_paid:
-    st.title("🧘 Welcome to Zyntra")
-    st.write("The smartest AI for ESP32-CAM and Robotics.")
+# This determines if the user sees the chat or the payment screen
+is_blocked = not st.session_state.is_paid and st.session_state.usage_count >= 3
+
+# --- 4. FRONT PAGE & PAYMENT SECTION ---
+# This block only shows up if they haven't paid AND they used their 3 free messages
+if is_blocked:
+    st.warning("🔒 Free Limit Reached")
+    st.title("Welcome to Zyntra Pro")
+    st.write("You've used your 3 free credits. To continue with unlimited robotics support, please upgrade.")
+    
+    # Pricing Metrics
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Zyntra Pro", "₹99 / 3 Mo")
+    with col2:
+        st.metric("Zyntra Max", "₹199 / Mo")
+
     st.divider()
-    
-    st.subheader("Unlock Zyntra Pro")
-    st.write("Pay via UPI to get your access code:")
-    st.info("UPI ID: your-phone-number@airtel") # <--- PUT YOUR REAL ID HERE
-    
-    st.write("Price: ₹99 (3 Months) / ₹199 (Monthly Max)")
+    st.info("Scan or Pay via UPI: **yourname@airtel**") # <--- Replace with your ID
     
     access_code = st.text_input("Enter your secret Access Code:", type="password")
-    if st.button("Activate"):
-        if access_code == "ZEN2026": # This is the code you give to customers
+    if st.button("Activate Unlimited Access"):
+        if access_code == "ZEN2026": # This is your password
             st.session_state.is_paid = True
-            st.success("Access Granted!")
+            st.success("Access Granted! Enjoy Zyntra Pro.")
             st.rerun()
         else:
-            st.error("Incorrect code. Please pay to receive the code.")
-    st.stop()
-
-# --- CHAT INTERFACE ---
-st.title("🧘 Zyntra Active")
-model = genai.GenerativeModel("gemini-1.5-flash")
-
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-
-for m in st.session_state.messages:
-    st.chat_message(m["role"]).write(m["content"])
-
-if prompt := st.chat_input("Ask about your Arduino or ESP32 project..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.chat_message("user").write(prompt)
+            st.error("Invalid Code. Please pay to receive your code.")
     
-    response = model.generate_content(prompt)
-    st.chat_message("assistant").write(response.text)
-    st.session_state.messages.append({"role": "assistant", "content": response.text})
+    st.stop() # This keeps the Chat Interface hidden until they pay
 
-st.divider()
-st.caption(f"© {datetime.now().year} Zyntra Labs. SGI Notice: Powered by AI.")
+# --- 5. CHAT INTERFACE ---
+st.title(" Zyntra AI")
+
+# Show the "Free Meter" only for people who haven't paid
+if not st.session_state.is_paid:
+    remaining = 3 - st.session_state.usage_count
+    st.caption(f"Free Plan: {remaining} free questions remaining")
