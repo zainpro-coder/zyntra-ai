@@ -61,7 +61,7 @@ if is_blocked:
         else:
             st.error("Invalid Code. Please pay to receive your code.")
     
-    st.stop() # This keeps the Chat Interface hidden until they pay
+  
 
 # --- 5. CHAT INTERFACE ---
 st.title(" Zyntra AI")
