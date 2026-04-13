@@ -55,9 +55,10 @@ if prompt:
             st.session_state.is_paid = True
             st.rerun()
     else:
-        # Connect to Gemini
+        
+        # These lines must be perfectly straight!
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-      model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-pro")
         response = model.generate_content(prompt)
         
         # Display response
