@@ -55,13 +55,15 @@ if prompt:
             st.session_state.is_paid = True
             st.rerun()
     else:
-        
-        # These lines must be perfectly straight!
+# 1. Setup AI
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        # 2. Get Response
         response = model.generate_content(prompt)
         
-        # Display response
+        # 3. Show Answer
+        st.markdown(f"**Zyntra:** {response.text}")
         st.write(response.text)
         
         if not st.session_state.is_paid:
