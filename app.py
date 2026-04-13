@@ -56,9 +56,10 @@ if prompt:
             st.rerun()
     else:
 # 1. Setup AI
+   # Fix: Line 60 only needs one closing bracket
         genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
         model = genai.GenerativeModel("gemini-1.5-flash")
-        
+        response = model.generate_content(prompt)
         # 2. Get Response
         response = model.generate_content(prompt)
         
