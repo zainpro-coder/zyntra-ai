@@ -32,7 +32,8 @@ with col3:
     st.button("login")
 
 # Center Text
-st.markdown('<p class="center-text">Were should we start ?</p>', unsafe_allow_input=True)
+# 3. CENTER TEXT
+st.markdown('<p class="center-text">Where should we start ?</p>', unsafe_allow_html=True)
 
 # 3. ACCESS & USAGE LOGIC (Invisible)
 if "usage_count" not in st.session_state:
