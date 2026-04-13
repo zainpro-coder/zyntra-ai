@@ -5,29 +5,24 @@ import google.generativeai as genai
 st.set_page_config(page_title="Zyntra", layout="wide")
 
 # CSS to make the page white and style the elements like your screenshot
+# Custom CSS for the clean white look
 st.markdown("""
     <style>
-    .main {
-        background-color: white;
-    }
     .stApp {
         background-color: white;
     }
-    /* Style the big center text */
     .center-text {
         font-family: 'Helvetica', sans-serif;
-        font-size: 60px;
+        font-size: 50px;
         font-weight: bold;
         color: black;
         text-align: center;
-        margin-top: 15%;
+        margin-top: 100px;
     }
-    /* Hide top bar and footer */
     header {visibility: hidden;}
     footer {visibility: hidden;}
     </style>
-    """, unsafe_allow_input=True)
-
+    """, unsafe_allow_html=True) # Changed from 'input' to 'html'
 # 2. THE UI ELEMENTS
 # Top right buttons (Simulated)
 col1, col2, col3 = st.columns([8, 1, 1])
