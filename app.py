@@ -1,4 +1,4 @@
-\import streamlit as st
+import streamlit as st
 import google.generativeai as genai
 
 # 1. PAGE CONFIG & HIDING STREAMLIT DEFAULTS
