@@ -97,14 +97,12 @@ if prompt:
             st.rerun()
     else:
         try:
-            # Initialize GenAI Client
-            client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+            # Revert to legacy Google GenerativeAI call for v1beta compatibility
+            import google.generativeai as legacy_genai
+            legacy_genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
             
-            # Using supported model string
-            response = client.models.generate_content(
-                model="gemini-2.5-flash-001",
-                contents=prompt,
-            )
+            model = legacy_genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(prompt)
             
             st.markdown(f"**Zyntra:** {response.text}")
             
