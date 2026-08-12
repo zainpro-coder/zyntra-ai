@@ -1,71 +1,41 @@
-import streamlit as st
-import google.generativeai as genai
+# --- FUNCTIONAL SIGN IN & LOGIN MODALS ---
 
-# 1. PAGE CONFIG & HIDING STREAMLIT DEFAULTS
-st.set_page_config(page_title="Zyntra", layout="wide")
-
-# CSS to make the page white and style the elements like your screenshot
-# Custom CSS for the clean white look
-st.markdown("""
-    <style>
-    .stApp {
-        background-color: white;
-    }
-    .center-text {
-        font-family: 'Helvetica', sans-serif;
-        font-size: 50px;
-        font-weight: bold;
-        color: black;
-        text-align: center;
-        margin-top: 100px;
-    }
-    header {visibility: hidden;}
-    footer {visibility: hidden;}
-    </style>
-    """, unsafe_allow_html=True) # Changed from 'input' to 'html'
-# 2. THE UI ELEMENTS
-# Top right buttons (Simulated)
-col1, col2, col3 = st.columns([8, 1, 1])
-with col2:
-    st.button("Sign in")
-with col3:
-    st.button("login")
-
-# Center Text
-# 3. CENTER TEXT
-st.markdown('<p class="center-text">Where should we start ?</p>', unsafe_allow_html=True)
-
-# 3. ACCESS & USAGE LOGIC (Invisible)
-if "usage_count" not in st.session_state:
-    st.session_state.usage_count = 0
-if "is_paid" not in st.session_state:
-    st.session_state.is_paid = False
-
-# 4. CHAT INPUT AT THE BOTTOM
-# We use a container to keep it pinned at the bottom
-with st.container():
-    prompt = st.chat_input("Ask anything")
-
-if prompt:
-    # Logic to block after 3 questions
-    if not st.session_state.is_paid and st.session_state.usage_count >= 3:
-        st.warning("Limit reached. Please pay yourname@airtel and enter code.")
-        code = st.text_input("Access Code", type="password")
-        if code == "ZEN2026":
-            st.session_state.is_paid = True
+@st.dialog("Sign In to Zyntra")
+def show_signin():
+    st.write("Welcome back! Enter your details below.")
+    email = st.text_input("Email", key="signin_email")
+    password = st.text_input("Password", type="password", key="signin_pass")
+    
+    if st.button("Sign In"):
+        if email and password:
+            st.success(f"Logged in as {email}")
+            st.session_state.is_logged_in = True
             st.rerun()
-    else:
-# 1. Setup AI
-   # Fix: Line 60 only needs one closing bracket
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        model = genai.GenerativeModel("gemini-1.5-pro")
-        response = model.generate_content(prompt)
-        # 2. Get Response
-        response = model.generate_content(prompt)
-        
-        # 3. Show Answer
-        st.markdown(f"**Zyntra:** {response.text}")
-        st.write(response.text)
-        
-        if not st.session_state.is_paid:
-            st.session_state.usage_count += 1
+        else:
+            st.error("Please enter both email and password.")
+
+@st.dialog("Create a Zyntra Account")
+def show_login():
+    st.write("Create an account to save your AI chats.")
+    new_user = st.text_input("Username", key="new_user")
+    new_email = st.text_input("Email", key="new_email")
+    new_pass = st.text_input("Password", type="password", key="new_pass")
+    
+    if st.button("Create Account"):
+        if new_user and new_email and new_pass:
+            st.success("Account created successfully!")
+            st.session_state.is_logged_in = True
+            st.rerun()
+        else:
+            st.error("Please fill in all fields.")
+
+# 2. TOP RIGHT BUTTONS & MODAL TRIGGER
+c1, c2, c3 = st.columns([8, 1, 1])
+
+with c2: 
+    if st.button("Sign in"):
+        show_signin()
+
+with c3: 
+    if st.button("login"):
+        show_login()
