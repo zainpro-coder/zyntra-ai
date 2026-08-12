@@ -98,8 +98,13 @@ if prompt:
     else:
         try:
             genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-            model = genai.GenerativeModel("gemini-1.5-flash")
             
+            # Explicitly pass model without alias issues
+            try:
+                model = genai.GenerativeModel("gemini-1.5-flash-latest")
+            except:
+                model = genai.GenerativeModel("gemini-pro")
+
             response = model.generate_content(prompt)
             st.markdown(f"**Zyntra:** {response.text}")
             
