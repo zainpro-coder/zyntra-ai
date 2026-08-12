@@ -97,12 +97,12 @@ if prompt:
             st.rerun()
     else:
         try:
-            # Initialize latest GenAI Client
+            # Initialize GenAI Client
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
             
-            # Generating response with gemini-2.5-flash
+            # Using supported model string
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-flash-001",
                 contents=prompt,
             )
             
