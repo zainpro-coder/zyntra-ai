@@ -22,7 +22,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. SESSION STATE LOGIC
+# 2. SESSION STATE FOR MODALS & USER DATA
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = None
 if "usage_count" not in st.session_state:
@@ -41,7 +41,7 @@ with c3:
     if st.button("login"):
         st.session_state.show_modal = "login"
 
-# --- MODAL POPUPS ---
+# --- MODAL POPUP DISPLAY LOGIC ---
 if st.session_state.show_modal == "signin":
     with st.expander("🔑 Sign In to Zyntra", expanded=True):
         st.write("Welcome back! Enter your credentials:")
@@ -97,12 +97,14 @@ if prompt:
             st.rerun()
     else:
         try:
-            # Revert to legacy Google GenerativeAI call for v1beta compatibility
-            import google.generativeai as legacy_genai
-            legacy_genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+            # Initialize Client using new Google GenAI SDK
+            client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
             
-            model = legacy_genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(prompt)
+            # Using active model endpoint for Python 3.14+
+            response = client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=prompt,
+            )
             
             st.markdown(f"**Zyntra:** {response.text}")
             
