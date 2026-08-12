@@ -97,15 +97,10 @@ if prompt:
             st.rerun()
     else:
         try:
-            # Latest Google GenAI Client
-            from google import genai
+            genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+            model = genai.GenerativeModel("gemini-1.5-flash")
             
-            client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
-            response = client.models.generate_content(
-                model="gemini-2.5-flash",
-                contents=prompt,
-            )
-            
+            response = model.generate_content(prompt)
             st.markdown(f"**Zyntra:** {response.text}")
             
             if not st.session_state.is_paid:
