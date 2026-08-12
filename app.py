@@ -99,13 +99,10 @@ if prompt:
         try:
             genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
             
-            # Explicitly pass model without alias issues
-            try:
-                model = genai.GenerativeModel("gemini-1.5-flash-latest")
-            except:
-                model = genai.GenerativeModel("gemini-pro")
-
+            # Using standard model string
+            model = genai.GenerativeModel("gemini-1.5-flash")
             response = model.generate_content(prompt)
+
             st.markdown(f"**Zyntra:** {response.text}")
             
             if not st.session_state.is_paid:
