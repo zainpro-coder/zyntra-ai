@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 
 # 1. PAGE CONFIG & STYLING
 st.set_page_config(page_title="Zyntra", layout="wide")
@@ -22,9 +22,9 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. SESSION STATE FOR MODALS & USER DATA
+# 2. SESSION STATE LOGIC
 if "show_modal" not in st.session_state:
-    st.session_state.show_modal = None  # Options: None, 'signin', 'login'
+    st.session_state.show_modal = None
 if "usage_count" not in st.session_state:
     st.session_state.usage_count = 0
 if "is_paid" not in st.session_state:
@@ -41,7 +41,7 @@ with c3:
     if st.button("login"):
         st.session_state.show_modal = "login"
 
-# --- MODAL POPUP DISPLAY LOGIC ---
+# --- MODAL POPUPS ---
 if st.session_state.show_modal == "signin":
     with st.expander("🔑 Sign In to Zyntra", expanded=True):
         st.write("Welcome back! Enter your credentials:")
@@ -97,12 +97,15 @@ if prompt:
             st.rerun()
     else:
         try:
-            genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+            # Initialize latest GenAI Client
+            client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
             
-            # Using standard model string
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            response = model.generate_content(prompt)
-
+            # Generating response with gemini-2.5-flash
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+            )
+            
             st.markdown(f"**Zyntra:** {response.text}")
             
             if not st.session_state.is_paid:
