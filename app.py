@@ -85,7 +85,6 @@ elif st.session_state.show_modal == "login":
 st.markdown('<p class="center-text">Where should we start ?</p>', unsafe_allow_html=True)
 
 # 5. CHAT INPUT & RESPONSE LOOP
-
 prompt = st.chat_input("Ask anything")
 
 if prompt:
@@ -98,11 +97,15 @@ if prompt:
             st.rerun()
     else:
         try:
-            # Connect using updated model name
-            genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-            model = genai.GenerativeModel("gemini-2.5-flash")
+            # Latest Google GenAI Client
+            from google import genai
             
-            response = model.generate_content(prompt)
+            client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+            )
+            
             st.markdown(f"**Zyntra:** {response.text}")
             
             if not st.session_state.is_paid:
