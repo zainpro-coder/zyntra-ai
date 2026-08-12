@@ -96,11 +96,18 @@ if prompt:
             st.success("Unlocked! Please ask your question again.")
             st.rerun()
     else:
-        genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
-        response = model.generate_content(prompt)
-        st.markdown(f"**Zyntra:** {response.text}")
-        
-        if not st.session_state.is_paid:
-            st.session_state.usage_count += 1
+        try:
+            # Connect to Google Gemini API
+            genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            
+            # Generate response
+            response = model.generate_content(prompt)
+            st.markdown(f"**Zyntra:** {response.text}")
+            
+            # Update message count
+            if not st.session_state.is_paid:
+                st.session_state.usage_count += 1
+                
+        except Exception as e:
+            st.error(f"AI Response Error: {e}")
