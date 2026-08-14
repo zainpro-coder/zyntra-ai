@@ -85,7 +85,7 @@ elif st.session_state.show_modal == "login":
 # 4. HERO HEADING
 st.markdown('<p class="center-text">Where should we start ?</p>', unsafe_allow_html=True)
 
-# 5. CHAT INPUT & DIRECT REST API CALL
+# 5. CHAT INPUT & RESPONSE LOOP (Direct Supported Models)
 prompt = st.chat_input("Ask anything")
 
 if prompt:
@@ -100,35 +100,35 @@ if prompt:
         try:
             api_key = st.secrets["GOOGLE_API_KEY"]
             
-            # Direct Universal REST Call (Works on all active API keys)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-            get_models = requests.get(url).json()
+            # List of active, verified production models in order of priority
+            models_to_try = [
+                "gemini-2.5-flash-preview",
+                "gemini-1.5-flash-8b",
+                "gemini-1.5-flash",
+                "gemini-1.5-pro"
+            ]
             
-            # Find the active generateContent model automatically
-            target_model = None
-            if "models" in get_models:
-                for m in get_models["models"]:
-                    if "generateContent" in m.get("supportedGenerationMethods", []):
-                        target_model = m["name"]
-                        break
+            reply = None
+            last_error = ""
             
-            if not target_model:
-                target_model = "models/gemini-pro"
+            for m in models_to_try:
+                endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={api_key}"
+                payload = {"contents": [{"parts": [{"text": prompt}]}]}
                 
-            generate_url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}]
-            }
+                res = requests.post(endpoint, json=payload).json()
+                
+                if "candidates" in res:
+                    reply = res["candidates"][0]["content"]["parts"][0]["text"]
+                    break
+                else:
+                    last_error = res.get("error", {}).get("message", "Service unavailable")
             
-            res = requests.post(generate_url, json=payload).json()
-            
-            if "candidates" in res:
-                reply = res["candidates"][0]["content"]["parts"][0]["text"]
+            if reply:
                 st.markdown(f"**Zyntra:** {reply}")
                 if not st.session_state.is_paid:
                     st.session_state.usage_count += 1
             else:
-                st.error(f"Google API Error: {res.get('error', {}).get('message', 'Failed to generate')}")
+                st.error(f"Google API Error: {last_error}")
                 
         except Exception as e:
             st.error(f"Error: {e}")
