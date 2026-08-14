@@ -70,7 +70,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 6. UNLIMITED FAST INTERACTIONS API
+# 6. FAST CHAT EXECUTION
 prompt = st.chat_input("Ask anything")
 
 if prompt:
@@ -82,30 +82,36 @@ if prompt:
         with st.spinner("Thinking..."):
             try:
                 api_key = st.secrets["GOOGLE_API_KEY"]
-                
-                # Official Google Interactions API Endpoint
                 url = f"https://generativelanguage.googleapis.com/v1beta/interactions?key={api_key}"
+                
                 payload = {
-                    "input": f"You are Zyntra AI, a helpful, fast, and friendly AI assistant. Answer directly and cleanly:\n\nUser: {prompt}"
+                    "model": "models/gemini-2.5-flash",
+                    "input": f"You are Zyntra AI, a helpful, fast, and polite AI assistant. Answer directly and cleanly:\n\nUser: {prompt}"
                 }
                 
                 res = requests.post(url, json=payload, timeout=12).json()
                 
-                # Check response format
-                if "output" in res:
-                    reply = res["output"]
-                elif "outputs" in res and len(res["outputs"]) > 0:
-                    reply = res["outputs"][0].get("text", "")
+                # Check for output from Interactions API
+                reply = None
+                if "outputs" in res and len(res["outputs"]) > 0:
+                    first_out = res["outputs"][0]
+                    if isinstance(first_out, dict):
+                        reply = first_out.get("text") or first_out.get("content")
+                    elif isinstance(first_out, str):
+                        reply = first_out
+                elif "output" in res:
+                    if isinstance(res["output"], dict):
+                        reply = res["output"].get("text")
+                    else:
+                        reply = res["output"]
                 elif "candidates" in res:
                     reply = res["candidates"][0]["content"]["parts"][0]["text"]
-                else:
-                    reply = None
 
                 if reply:
                     st.write(reply)
                     st.session_state.messages.append({"role": "assistant", "content": reply})
                 else:
-                    err_msg = res.get("error", {}).get("message", "API error occurred.")
+                    err_msg = res.get("error", {}).get("message", "Could not parse response.")
                     st.error(f"Error: {err_msg}")
                     
             except Exception as e:
