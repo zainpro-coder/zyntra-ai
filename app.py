@@ -11,7 +11,24 @@ if "show_modal" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 3. TOP RIGHT BUTTONS
+# 3. FAST CACHED MODEL FINDER (Runs only ONCE on startup)
+@st.cache_data(ttl=3600)
+def get_best_model(api_key):
+    try:
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+        res = requests.get(url, timeout=5).json()
+        if "models" in res:
+            for m in res["models"]:
+                name = m.get("name", "")
+                methods = m.get("supportedGenerationMethods", [])
+                # Pick the first valid text generation model
+                if "generateContent" in methods and "embedding" not in name:
+                    return name
+    except Exception:
+        pass
+    return "models/gemini-1.5-flash-8b"
+
+# 4. TOP RIGHT BUTTONS
 c1, c2, c3 = st.columns([8, 1, 1])
 
 with c2: 
@@ -62,15 +79,15 @@ elif st.session_state.show_modal == "login":
                 st.session_state.show_modal = None
                 st.rerun()
 
-# 4. HERO HEADING
+# 5. HERO HEADING
 st.markdown("<h1 style='text-align: center; margin-top: 30px;'>Where should we start ?</h1>", unsafe_allow_html=True)
 
-# 5. DISPLAY PREVIOUS CHAT HISTORY
+# 6. DISPLAY PREVIOUS CHAT HISTORY
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 6. FAST CHAT INPUT
+# 7. CHAT INPUT & FAST EXECUTION
 prompt = st.chat_input("Ask anything")
 
 if prompt:
@@ -82,13 +99,16 @@ if prompt:
         with st.spinner("Thinking..."):
             try:
                 api_key = st.secrets["GOOGLE_API_KEY"]
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+                active_model = get_best_model(api_key)
                 
+                url = f"https://generativelanguage.googleapis.com/v1beta/{active_model}:generateContent?key={api_key}"
                 payload = {
-                    "contents": [{"parts": [{"text": prompt}]}]
+                    "contents": [{
+                        "parts": [{"text": f"You are Zyntra AI, a fast, clean, and helpful AI assistant. Answer directly without showing your reasoning thoughts:\n\n{prompt}"}]
+                    }]
                 }
                 
-                res = requests.post(url, json=payload).json()
+                res = requests.post(url, json=payload, timeout=10).json()
                 
                 if "candidates" in res:
                     reply = res["candidates"][0]["content"]["parts"][0]["text"]
