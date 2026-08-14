@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import json
+import base64
 import re
 
 # 1. PAGE CONFIG & STYLING
@@ -83,27 +84,65 @@ if st.session_state.show_modal == "account":
 current_messages = st.session_state.conversations[st.session_state.active_chat]
 
 if len(current_messages) == 0:
-    st.markdown("<h1 style='text-align: center; margin-top: 40px;'>Where should we start?</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #9CA3AF;'>Ask anything, brainstorm ideas, recipes, or chat naturally.</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; margin-top: 20px;'>Where should we start?</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #9CA3AF;'>Ask questions, upload files, or take pictures for AI analysis.</p>", unsafe_allow_html=True)
 
+# Display historical messages of this conversation
 for msg in current_messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
+        if "image" in msg and msg["image"]:
+            st.image(msg["image"], width=300)
 
-# 6. FAST INPUT WITH AUTOMATIC LOAD-BALANCED FALLBACK
+# 6. ATTACHMENT EXPANDER (FILES & CAMERA)
+with st.expander("📎 Upload Files / Capture Picture"):
+    col_up, col_cam = st.columns(2)
+    with col_up:
+        uploaded_file = st.file_uploader("Upload Image or Text File", type=["png", "jpg", "jpeg", "txt"], key="file_up")
+    with col_cam:
+        camera_file = st.camera_input("Take a Snapshot", key="cam_pic")
+
+# Select attachment if any
+attached_file = uploaded_file or camera_file
+
+# 7. INPUT & MULTIMODAL GEMINI EXECUTION
 prompt = st.chat_input("Ask anything...")
 
 if prompt:
-    current_messages.append({"role": "user", "content": prompt})
+    user_msg_entry = {"role": "user", "content": prompt}
+    
+    # Process image if attached
+    image_parts = []
+    if attached_file:
+        file_bytes = attached_file.getvalue()
+        mime_type = attached_file.type or "image/jpeg"
+        
+        if mime_type.startswith("image/"):
+            user_msg_entry["image"] = file_bytes
+            b64_data = base64.b64encode(file_bytes).decode("utf-8")
+            image_parts.append({
+                "inline_data": {
+                    "mime_type": mime_type,
+                    "data": b64_data
+                }
+            })
+        elif mime_type == "text/plain":
+            file_text = file_bytes.decode("utf-8", errors="ignore")
+            prompt = f"File Content:\n```\n{file_text}\n```\n\nUser Question: {prompt}"
+            user_msg_entry["content"] = prompt
+
+    current_messages.append(user_msg_entry)
     with st.chat_message("user"):
         st.write(prompt)
+        if "image" in user_msg_entry:
+            st.image(user_msg_entry["image"], width=300)
 
     with st.chat_message("assistant"):
-        with st.spinner("Zyntra is typing..."):
+        with st.spinner("Zyntra is thinking & analyzing..."):
             try:
                 api_key = st.secrets["GOOGLE_API_KEY"]
                 
-                # Fetch available text models dynamically
+                # Fetch active models
                 models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
                 list_res = requests.get(models_url, timeout=5).json()
                 
@@ -116,33 +155,38 @@ if prompt:
                             if "gemma" not in name.lower() and "2.5-flash" not in name and "2.5-pro" not in name:
                                 candidate_models.append(name)
                 
-                # Verified list of stable models in order of priority
                 fallback_list = candidate_models + [
                     "models/gemini-1.5-flash-8b",
                     "models/gemini-1.5-flash",
                     "models/gemini-1.5-pro"
                 ]
                 
-                # Deduplicate while keeping order
                 seen = set()
                 final_models = [x for x in fallback_list if not (x in seen or seen.add(x))]
 
                 system_rules = (
-                    "You are Zyntra AI, a lightning-fast, polite, and intelligent AI assistant developed by Mr. Mohammad Zain. "
-                    "Always reply directly, cleanly, and helpfully in the language the user speaks (Hindi/English/Hinglish). "
-                    "Do not print internal reasoning or thought scratchpads. Output only the final clean response."
+                    "You are Zyntra AI, an intelligent, helpful AI assistant created and developed by Mr. Mohammad Zain. "
+                    "Always reply directly, politely, and cleanly in the user's language (Hindi/English/Hinglish). "
+                    "When given an image, inspect it carefully and describe or answer the user's question about it accurately. "
+                    "Do not print internal reasoning thoughts or drafts. Output only the final response."
                 )
 
                 recent_history = current_messages[-6:]
                 contents_payload = []
                 for i, msg in enumerate(recent_history):
                     role_tag = "user" if msg["role"] == "user" else "model"
-                    text_val = msg["content"]
+                    parts = [{"text": msg["content"]}]
+                    
                     if i == 0 and role_tag == "user":
-                        text_val = f"[{system_rules}]\n\n{text_val}"
+                        parts[0]["text"] = f"[{system_rules}]\n\n{parts[0]['text']}"
+                    
+                    # Attach the image to the current user turn
+                    if i == len(recent_history) - 1 and image_parts:
+                        parts = image_parts + parts
+                        
                     contents_payload.append({
                         "role": role_tag,
-                        "parts": [{"text": text_val}]
+                        "parts": parts
                     })
 
                 payload = {
@@ -156,11 +200,10 @@ if prompt:
                 reply = None
                 last_err = ""
                 
-                # Iterate through models: if one is high demand / busy, try the next instantly
                 for model_choice in final_models:
                     gen_url = f"https://generativelanguage.googleapis.com/v1beta/{model_choice}:generateContent?key={api_key}"
                     try:
-                        res = requests.post(gen_url, json=payload, timeout=12).json()
+                        res = requests.post(gen_url, json=payload, timeout=25).json()
                         if "candidates" in res and len(res["candidates"]) > 0:
                             parts = res["candidates"][0].get("content", {}).get("parts", [])
                             if parts and "text" in parts[0]:
@@ -168,9 +211,7 @@ if prompt:
                                 reply = re.sub(r"<thought>.*?</thought>", "", raw_text, flags=re.DOTALL).strip()
                                 break
                         else:
-                            err_text = res.get("error", {}).get("message", "")
-                            # If high demand or not found, silently proceed to the next fallback model
-                            last_err = err_text
+                            last_err = res.get("error", {}).get("message", "")
                     except Exception:
                         continue
                 
@@ -178,7 +219,7 @@ if prompt:
                     st.write(reply)
                     current_messages.append({"role": "assistant", "content": reply})
                 else:
-                    st.error(f"Error: {last_err if last_err else 'All models currently busy. Please try in a moment.'}")
+                    st.error(f"Error: {last_err if last_err else 'Service busy. Please try again.'}")
                     
             except Exception as e:
                 st.error(f"Error: {e}")
