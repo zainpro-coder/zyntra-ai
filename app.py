@@ -1,5 +1,6 @@
 import streamlit as st
-from google import genai
+import requests
+import json
 
 # 1. PAGE CONFIG & STYLING
 st.set_page_config(page_title="Zyntra", layout="wide")
@@ -22,7 +23,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. SESSION STATE FOR MODALS & USER DATA
+# 2. SESSION STATE LOGIC
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = None
 if "usage_count" not in st.session_state:
@@ -41,7 +42,7 @@ with c3:
     if st.button("login"):
         st.session_state.show_modal = "login"
 
-# --- MODAL POPUP DISPLAY LOGIC ---
+# --- MODAL POPUPS ---
 if st.session_state.show_modal == "signin":
     with st.expander("🔑 Sign In to Zyntra", expanded=True):
         st.write("Welcome back! Enter your credentials:")
@@ -84,7 +85,7 @@ elif st.session_state.show_modal == "login":
 # 4. HERO HEADING
 st.markdown('<p class="center-text">Where should we start ?</p>', unsafe_allow_html=True)
 
-# 5. CHAT INPUT & RESPONSE LOOP
+# 5. CHAT INPUT & DIRECT REST API CALL
 prompt = st.chat_input("Ask anything")
 
 if prompt:
@@ -97,29 +98,37 @@ if prompt:
             st.rerun()
     else:
         try:
-            # Initialize client
-            client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
+            api_key = st.secrets["GOOGLE_API_KEY"]
             
-            # Fetch active models dynamically from your key
-            active_model = None
-            for m in client.models.list():
-                if "generateContent" in (m.supported_actions or []):
-                    active_model = m.name
-                    break
+            # Direct Universal REST Call (Works on all active API keys)
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+            get_models = requests.get(url).json()
             
-            # Fallback if list lookup fails
-            if not active_model:
-                active_model = "gemini-2.5-flash"
-
-            response = client.models.generate_content(
-                model=active_model,
-                contents=prompt,
-            )
+            # Find the active generateContent model automatically
+            target_model = None
+            if "models" in get_models:
+                for m in get_models["models"]:
+                    if "generateContent" in m.get("supportedGenerationMethods", []):
+                        target_model = m["name"]
+                        break
             
-            st.markdown(f"**Zyntra:** {response.text}")
+            if not target_model:
+                target_model = "models/gemini-pro"
+                
+            generate_url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}]
+            }
             
-            if not st.session_state.is_paid:
-                st.session_state.usage_count += 1
+            res = requests.post(generate_url, json=payload).json()
+            
+            if "candidates" in res:
+                reply = res["candidates"][0]["content"]["parts"][0]["text"]
+                st.markdown(f"**Zyntra:** {reply}")
+                if not st.session_state.is_paid:
+                    st.session_state.usage_count += 1
+            else:
+                st.error(f"Google API Error: {res.get('error', {}).get('message', 'Failed to generate')}")
                 
         except Exception as e:
-            st.error(f"AI Response Error: {e}")
+            st.error(f"Error: {e}")
