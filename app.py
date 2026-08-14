@@ -2,79 +2,100 @@ import streamlit as st
 import requests
 import json
 
-# 1. PAGE CONFIG
-st.set_page_config(page_title="Zyntra", layout="wide")
+# 1. PAGE CONFIG & STYLING
+st.set_page_config(page_title="Zyntra AI", page_icon="⚡", layout="wide")
 
-# 2. SESSION STATE
+st.markdown("""
+    <style>
+    .stApp {
+        background-color: #0E1117;
+        color: #FAFAFA;
+    }
+    .creator-badge {
+        font-size: 13px;
+        color: #9CA3AF;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# 2. SESSION STATE MANAGEMENT (Chat History, Multi-turn memory, Account)
+if "conversations" not in st.session_state:
+    st.session_state.conversations = {"Current Chat": []}
+if "active_chat" not in st.session_state:
+    st.session_state.active_chat = "Current Chat"
+if "user_name" not in st.session_state:
+    st.session_state.user_name = "Mohammad Zain"
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = None
-if "messages" not in st.session_state:
-    st.session_state.messages = []
 
-# 3. TOP RIGHT BUTTONS
-c1, c2, c3 = st.columns([8, 1, 1])
+# 3. SIDEBAR (CHATGPT STYLE: NEW CHAT, LIBRARY, ACCOUNT)
+with st.sidebar:
+    st.title("⚡ Zyntra AI")
+    st.markdown('<p class="creator-badge">Created by <b>Mr. Mohammad Zain</b></p>', unsafe_allow_html=True)
+    
+    if st.button("➕ New Chat", use_container_width=True):
+        chat_id = f"Chat {len(st.session_state.conversations) + 1}"
+        st.session_state.conversations[chat_id] = []
+        st.session_state.active_chat = chat_id
+        st.rerun()
 
-with c2: 
-    if st.button("Sign in"):
-        st.session_state.show_modal = "signin"
-
-with c3: 
-    if st.button("Login"):
-        st.session_state.show_modal = "login"
-
-# --- MODAL POPUPS ---
-if st.session_state.show_modal == "signin":
-    with st.expander("🔑 Sign In to Zyntra", expanded=True):
-        st.write("Welcome back! Enter your credentials:")
-        email = st.text_input("Email", key="signin_email")
-        password = st.text_input("Password", type="password", key="signin_pass")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Submit Sign In"):
-                if email and password:
-                    st.success(f"Logged in as {email}")
-                    st.session_state.show_modal = None
+    st.markdown("---")
+    st.subheader("📚 Chat Library")
+    for chat_name in list(st.session_state.conversations.keys()):
+        col_chat, col_del = st.columns([4, 1])
+        with col_chat:
+            if st.button(f"💬 {chat_name}", key=f"btn_{chat_name}", use_container_width=True):
+                st.session_state.active_chat = chat_name
+                st.rerun()
+        with col_del:
+            if len(st.session_state.conversations) > 1:
+                if st.button("🗑️", key=f"del_{chat_name}"):
+                    del st.session_state.conversations[chat_name]
+                    st.session_state.active_chat = list(st.session_state.conversations.keys())[0]
                     st.rerun()
-                else:
-                    st.error("Please fill in both fields.")
-        with col_b:
+
+    st.markdown("---")
+    st.subheader("👤 User Account")
+    st.write(f"Logged in as: **{st.session_state.user_name}**")
+    if st.button("Manage Account", use_container_width=True):
+        st.session_state.show_modal = "account"
+
+# 4. TOP BAR MODAL POPUP
+if st.session_state.show_modal == "account":
+    with st.expander("👤 User Profile & Settings", expanded=True):
+        new_name = st.text_input("Display Name:", value=st.session_state.user_name)
+        col_save, col_close = st.columns(2)
+        with col_save:
+            if st.button("Save Profile"):
+                st.session_state.user_name = new_name
+                st.session_state.show_modal = None
+                st.success("Profile Updated!")
+                st.rerun()
+        with col_close:
             if st.button("Close"):
                 st.session_state.show_modal = None
                 st.rerun()
 
-elif st.session_state.show_modal == "login":
-    with st.expander("📝 Create a Zyntra Account", expanded=True):
-        st.write("Register for a new account:")
-        new_user = st.text_input("Username", key="new_user")
-        new_email = st.text_input("Email", key="new_email")
-        new_pass = st.text_input("Password", type="password", key="new_pass")
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Register Account"):
-                if new_user and new_email and new_pass:
-                    st.success("Account created successfully!")
-                    st.session_state.show_modal = None
-                    st.rerun()
-                else:
-                    st.error("Please fill in all fields.")
-        with col_b:
-            if st.button("Close"):
-                st.session_state.show_modal = None
-                st.rerun()
+# 5. MAIN CHAT AREA
+current_messages = st.session_state.conversations[st.session_state.active_chat]
 
-# 4. HERO HEADING
-st.markdown("<h1 style='text-align: center; margin-top: 30px;'>Where should we start ?</h1>", unsafe_allow_html=True)
+if len(current_messages) == 0:
+    st.markdown("<h1 style='text-align: center; margin-top: 40px;'>Where should we start?</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #9CA3AF;'>Ask anything, brainstorm ideas, or just chat naturally.</p>", unsafe_allow_html=True)
 
-# 5. DISPLAY PREVIOUS CHAT HISTORY
-for msg in st.session_state.messages:
+# Display historical messages of this conversation
+for msg in current_messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 6. FAST EXECUTION WITH SYSTEM IDENTITY (CREATOR: MR. MOHAMMAD ZAIN)
-prompt = st.chat_input("Ask anything")
+# 6. INPUT & MULTI-TURN CONVERSATIONAL MEMORY LOOP
+prompt = st.chat_input("Ask anything...")
 
 if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
+    # Save User message to active conversation
+    current_messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
 
@@ -83,7 +104,7 @@ if prompt:
             try:
                 api_key = st.secrets["GOOGLE_API_KEY"]
                 
-                # Fetch active models on this key
+                # Dynamic Model Discovery to avoid 404
                 models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
                 list_res = requests.get(models_url, timeout=10).json()
                 
@@ -92,29 +113,38 @@ if prompt:
                     for m in list_res["models"]:
                         name = m.get("name", "")
                         methods = m.get("supportedGenerationMethods", [])
-                        
                         if "generateContent" in methods and "embedding" not in name:
                             if "2.5-flash" not in name and "2.5-pro" not in name:
                                 candidate_models.append(name)
                 
+                # Build Multi-Turn History Payload
+                contents_payload = []
+                
+                # System instructions prepended
+                system_instruction = (
+                    "You are Zyntra AI, a natural, empathetic, highly intelligent conversation partner and assistant. "
+                    "You were created and developed by Mr. Mohammad Zain. "
+                    "Engage in smooth, ongoing multi-turn conversations. If the user says casual phrases like 'oh', 'cool', 'okay', 'nice', "
+                    "do NOT complain that it is not a question. Instead, respond naturally like a human companion, keeping the conversation engaging, polite, and contextual."
+                )
+                
+                # Format full history for the AI
+                for msg in current_messages:
+                    role_tag = "user" if msg["role"] == "user" else "model"
+                    contents_payload.append({
+                        "role": role_tag,
+                        "parts": [{"text": msg["content"]}]
+                    })
+                
+                # Prepend identity guidance into the latest query context
+                contents_payload[-1]["parts"][0]["text"] = f"[System Context: {system_instruction}]\nUser Message: {prompt}"
+
                 reply = None
                 last_err = ""
                 
-                # System prompt specifying creator identity
-                system_instruction = (
-                    "You are Zyntra AI, an intelligent, fast, and polite AI assistant created and developed by Mr. Mohammad Zain. "
-                    "Whenever asked about your creator, developer, founder, or who made you, always state clearly and respectfully that you were created by Mr. Mohammad Zain. "
-                    "Always answer directly, politely, and cleanly in the user's language without showing internal reasoning steps."
-                )
-                
-                # Try candidate models
                 for target_model in candidate_models:
                     gen_url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={api_key}"
-                    payload = {
-                        "contents": [{
-                            "parts": [{"text": f"{system_instruction}\n\nUser Question: {prompt}"}]
-                        }]
-                    }
+                    payload = {"contents": contents_payload}
                     
                     res = requests.post(gen_url, json=payload, timeout=30).json()
                     
@@ -128,9 +158,9 @@ if prompt:
 
                 if reply:
                     st.write(reply)
-                    st.session_state.messages.append({"role": "assistant", "content": reply})
+                    current_messages.append({"role": "assistant", "content": reply})
                 else:
-                    st.error(f"Error: {last_err if last_err else 'Response took too long or model unavailable.'}")
+                    st.error(f"Error: {last_err if last_err else 'Service unavailable.'}")
                     
             except Exception as e:
                 st.error(f"Error: {e}")
