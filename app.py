@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import json
+import re
 
 # 1. PAGE CONFIG & STYLING
 st.set_page_config(page_title="Zyntra AI", page_icon="⚡", layout="wide")
@@ -20,7 +21,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. SESSION STATE MANAGEMENT (Chat History, Multi-turn memory, Account)
+# 2. SESSION STATE MANAGEMENT
 if "conversations" not in st.session_state:
     st.session_state.conversations = {"Current Chat": []}
 if "active_chat" not in st.session_state:
@@ -62,7 +63,7 @@ with st.sidebar:
     if st.button("Manage Account", use_container_width=True):
         st.session_state.show_modal = "account"
 
-# 4. TOP BAR MODAL POPUP
+# 4. MODAL POPUP
 if st.session_state.show_modal == "account":
     with st.expander("👤 User Profile & Settings", expanded=True):
         new_name = st.text_input("Display Name:", value=st.session_state.user_name)
@@ -85,16 +86,14 @@ if len(current_messages) == 0:
     st.markdown("<h1 style='text-align: center; margin-top: 40px;'>Where should we start?</h1>", unsafe_allow_html=True)
     st.markdown("<p style='text-align: center; color: #9CA3AF;'>Ask anything, brainstorm ideas, or just chat naturally.</p>", unsafe_allow_html=True)
 
-# Display historical messages of this conversation
 for msg in current_messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 6. INPUT & MULTI-TURN CONVERSATIONAL MEMORY LOOP
+# 6. INPUT & CLEAN CONVERSATIONAL CALL
 prompt = st.chat_input("Ask anything...")
 
 if prompt:
-    # Save User message to active conversation
     current_messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
@@ -104,7 +103,7 @@ if prompt:
             try:
                 api_key = st.secrets["GOOGLE_API_KEY"]
                 
-                # Dynamic Model Discovery to avoid 404
+                # Fetch available text models
                 models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
                 list_res = requests.get(models_url, timeout=10).json()
                 
@@ -117,18 +116,8 @@ if prompt:
                             if "2.5-flash" not in name and "2.5-pro" not in name:
                                 candidate_models.append(name)
                 
-                # Build Multi-Turn History Payload
+                # Format multi-turn chat history
                 contents_payload = []
-                
-                # System instructions prepended
-                system_instruction = (
-                    "You are Zyntra AI, a natural, empathetic, highly intelligent conversation partner and assistant. "
-                    "You were created and developed by Mr. Mohammad Zain. "
-                    "Engage in smooth, ongoing multi-turn conversations. If the user says casual phrases like 'oh', 'cool', 'okay', 'nice', "
-                    "do NOT complain that it is not a question. Instead, respond naturally like a human companion, keeping the conversation engaging, polite, and contextual."
-                )
-                
-                # Format full history for the AI
                 for msg in current_messages:
                     role_tag = "user" if msg["role"] == "user" else "model"
                     contents_payload.append({
@@ -136,22 +125,40 @@ if prompt:
                         "parts": [{"text": msg["content"]}]
                     })
                 
-                # Prepend identity guidance into the latest query context
-                contents_payload[-1]["parts"][0]["text"] = f"[System Context: {system_instruction}]\nUser Message: {prompt}"
+                system_text = (
+                    "You are Zyntra AI, a polished, witty, and concise AI assistant developed by Mr. Mohammad Zain. "
+                    "CRITICAL RULES: "
+                    "1. Respond directly like ChatGPT/Gemini. "
+                    "2. Never output your internal thinking, scratchpad, planning steps, or drafts. "
+                    "3. Keep answers crisp, clear, and to the point without unnecessary fluff. "
+                    "4. If the user engages casually (e.g. 'oh', 'cool', 'okay'), reply conversationally and naturally."
+                )
+
+                payload = {
+                    "system_instruction": {
+                        "parts": [{"text": system_text}]
+                    },
+                    "contents": contents_payload,
+                    "generationConfig": {
+                        "temperature": 0.7,
+                        "maxOutputTokens": 1024
+                    }
+                }
 
                 reply = None
                 last_err = ""
                 
                 for target_model in candidate_models:
                     gen_url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={api_key}"
-                    payload = {"contents": contents_payload}
-                    
-                    res = requests.post(gen_url, json=payload, timeout=30).json()
+                    res = requests.post(gen_url, json=payload, timeout=25).json()
                     
                     if "candidates" in res and len(res["candidates"]) > 0:
                         parts = res["candidates"][0].get("content", {}).get("parts", [])
                         if parts and "text" in parts[0]:
-                            reply = parts[0]["text"]
+                            raw_text = parts[0]["text"]
+                            # Clean any leftover thinking tags or scratchpads
+                            cleaned_text = re.sub(r"<thought>.*?</thought>", "", raw_text, flags=re.DOTALL).strip()
+                            reply = cleaned_text if cleaned_text else raw_text
                             break
                     else:
                         last_err = res.get("error", {}).get("message", "")
