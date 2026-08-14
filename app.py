@@ -2,32 +2,51 @@ import streamlit as st
 import requests
 import json
 
-# 1. PAGE CONFIG & STYLING
+# 1. PAGE CONFIG & STYLING (FIXED TEXT COLOR)
 st.set_page_config(page_title="Zyntra", layout="wide")
 
 st.markdown("""
     <style>
+    /* Force white background across the entire app */
     .stApp {
-        background-color: white;
+        background-color: #FFFFFF;
+        color: #111827;
     }
+    
+    /* Make all markdown, paragraphs, and lists dark and clearly visible */
+    p, span, div, li, h1, h2, h3, h4, h5, h6 {
+        color: #111827 !important;
+    }
+    
     .center-text {
         font-family: 'Helvetica', sans-serif;
         font-size: 50px;
         font-weight: bold;
-        color: black;
+        color: #111827 !important;
         text-align: center;
-        margin-top: 50px;
+        margin-top: 40px;
     }
+
+    /* Style the response box cleanly */
+    .response-card {
+        background-color: #F9FAFB;
+        border: 1px solid #E5E7EB;
+        border-radius: 12px;
+        padding: 20px;
+        margin-top: 20px;
+        color: #111827 !important;
+        font-size: 16px;
+        line-height: 1.6;
+    }
+    
     header {visibility: hidden;}
     footer {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
-# 2. SESSION STATE FOR MODALS & CHAT HISTORY
+# 2. SESSION STATE FOR MODALS
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = None
-if "messages" not in st.session_state:
-    st.session_state.messages = []
 
 # 3. TOP RIGHT BUTTONS
 c1, c2, c3 = st.columns([8, 1, 1])
@@ -90,7 +109,7 @@ if prompt:
     try:
         api_key = st.secrets["GOOGLE_API_KEY"]
         
-        # Discover clean models from your key
+        # Discover active models
         url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
         list_res = requests.get(url).json()
         
@@ -109,7 +128,7 @@ if prompt:
         for model_name in valid_models:
             endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
             payload = {
-                "contents": [{"parts": [{"text": f"You are Zyntra AI, a helpful, fast, and polite AI assistant. Answer directly and cleanly without printing internal reasoning:\n\nUser: {prompt}"}]}]
+                "contents": [{"parts": [{"text": f"You are Zyntra AI, an intelligent, helpful, and concise assistant. Provide a direct, clean answer:\n\nUser: {prompt}"}]}]
             }
             res = requests.post(endpoint, json=payload).json()
             if "candidates" in res:
@@ -117,7 +136,8 @@ if prompt:
                 break
         
         if reply:
-            st.markdown(f"**Zyntra:**\n\n{reply}")
+            # Styled Card with high-contrast visible text
+            st.markdown(f'<div class="response-card"><strong>Zyntra:</strong><br><br>{reply}</div>', unsafe_allow_html=True)
         else:
             st.error("Failed to generate response. Please try again.")
             
