@@ -90,7 +90,35 @@ for msg in current_messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 6. INPUT & BULLETPROOF CHAT LOOP
+# 6. SMART PARSER FUNCTION (STRIPS ALL THINKING / OUTLINES)
+def clean_model_output(text):
+    if not text:
+        return ""
+    
+    # 1. Remove XML/HTML thought tags
+    text = re.sub(r"<thought>.*?</thought>", "", text, flags=re.DOTALL)
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+    
+    # 2. If it contains "Response:" or "*Response:*", take only what is after it
+    match = re.search(r"(?:^|\n)\*?\*?Response:\*?\*?\s*(.*)", text, flags=re.DOTALL | re.IGNORECASE)
+    if match:
+        cleaned = match.group(1).strip()
+        # Remove surrounding quotes if present
+        if (cleaned.startswith('"') and cleaned.endswith('"')) or (cleaned.startswith("'") and cleaned.endswith("'")):
+            cleaned = cleaned[1:-1].strip()
+        return cleaned
+    
+    # 3. If it starts with bullet point reasoning breakdown, strip lines that start with bulleted thinking
+    lines = text.split("\n")
+    if len(lines) > 2 and any(l.strip().startswith("* User input:") or l.strip().startswith("* System Instruction:") for l in lines[:5]):
+        # Find the last non-bullet paragraph
+        content_lines = [l for l in lines if not l.strip().startswith("*") and not l.strip().startswith("o ")]
+        if content_lines:
+            return "\n".join(content_lines).strip()
+            
+    return text.strip()
+
+# 7. INPUT & FAST CLEAN CHAT
 prompt = st.chat_input("Ask anything...")
 
 if prompt:
@@ -112,20 +140,22 @@ if prompt:
                     for m in list_res["models"]:
                         name = m.get("name", "")
                         methods = m.get("supportedGenerationMethods", [])
+                        # BLOCK ALL GEMMA AND DEPRECATED FLASH MODELS
                         if "generateContent" in methods and "embedding" not in name:
-                            if "2.5-flash" not in name and "2.5-pro" not in name:
+                            if "gemma" not in name.lower() and "2.5-flash" not in name and "2.5-pro" not in name:
                                 candidate_models.append(name)
                 
-                # Format conversations with clean prompt wrapping
+                # Fallback if list filtered everything
+                if not candidate_models:
+                    candidate_models = ["models/gemini-1.5-flash-8b", "models/gemini-1.5-flash"]
+                
                 system_rules = (
-                    "System Instruction: You are Zyntra AI, an intelligent, helpful, and concise AI assistant created by Mr. Mohammad Zain. "
-                    "Always respond directly, cleanly, and politely in the language the user speaks (Hindi/English/Hinglish). "
-                    "Do not print internal reasoning, chain-of-thought, or planning notes. "
-                    "If the user engages casually (e.g. 'oh', 'theek hai', 'achha'), respond naturally."
+                    "You are Zyntra AI, an intelligent, helpful, and concise AI assistant created by Mr. Mohammad Zain. "
+                    "Always respond directly, cleanly, and naturally in the user's language (Hindi/English/Hinglish). "
+                    "Output ONLY the final direct response. Never show any internal thoughts, draft options, or reasoning bullets."
                 )
 
                 contents_payload = []
-                # Add context with system rules cleanly
                 for i, msg in enumerate(current_messages):
                     role_tag = "user" if msg["role"] == "user" else "model"
                     text_val = msg["content"]
@@ -155,9 +185,7 @@ if prompt:
                         parts = res["candidates"][0].get("content", {}).get("parts", [])
                         if parts and "text" in parts[0]:
                             raw_text = parts[0]["text"]
-                            # Strip out any lingering reasoning tokens if Gemma is hit
-                            cleaned = re.sub(r"<thought>.*?</thought>", "", raw_text, flags=re.DOTALL).strip()
-                            reply = cleaned if cleaned else raw_text
+                            reply = clean_model_output(raw_text)
                             break
                     else:
                         last_err = res.get("error", {}).get("message", "")
