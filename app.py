@@ -84,6 +84,92 @@ elif st.session_state.show_modal == "login":
 # 4. HERO HEADING
 st.markdown('<p class="center-text">Where should we start ?</p>', unsafe_allow_html=True)
 
+import streamlit as st
+from google import genai
+
+# 1. PAGE CONFIG & STYLING
+st.set_page_config(page_title="Zyntra", layout="wide")
+
+st.markdown("""
+    <style>
+    .stApp {
+        background-color: white;
+    }
+    .center-text {
+        font-family: 'Helvetica', sans-serif;
+        font-size: 50px;
+        font-weight: bold;
+        color: black;
+        text-align: center;
+        margin-top: 50px;
+    }
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+    </style>
+    """, unsafe_allow_html=True)
+
+# 2. SESSION STATE FOR MODALS & USER DATA
+if "show_modal" not in st.session_state:
+    st.session_state.show_modal = None
+if "usage_count" not in st.session_state:
+    st.session_state.usage_count = 0
+if "is_paid" not in st.session_state:
+    st.session_state.is_paid = False
+
+# 3. TOP RIGHT BUTTONS
+c1, c2, c3 = st.columns([8, 1, 1])
+
+with c2: 
+    if st.button("Sign in"):
+        st.session_state.show_modal = "signin"
+
+with c3: 
+    if st.button("login"):
+        st.session_state.show_modal = "login"
+
+# --- MODAL POPUP DISPLAY LOGIC ---
+if st.session_state.show_modal == "signin":
+    with st.expander("🔑 Sign In to Zyntra", expanded=True):
+        st.write("Welcome back! Enter your credentials:")
+        email = st.text_input("Email", key="signin_email")
+        password = st.text_input("Password", type="password", key="signin_pass")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("Submit Sign In"):
+                if email and password:
+                    st.success(f"Logged in as {email}")
+                    st.session_state.show_modal = None
+                    st.rerun()
+                else:
+                    st.error("Please fill in both fields.")
+        with col_b:
+            if st.button("Close"):
+                st.session_state.show_modal = None
+                st.rerun()
+
+elif st.session_state.show_modal == "login":
+    with st.expander("📝 Create a Zyntra Account", expanded=True):
+        st.write("Register for a new account:")
+        new_user = st.text_input("Username", key="new_user")
+        new_email = st.text_input("Email", key="new_email")
+        new_pass = st.text_input("Password", type="password", key="new_pass")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("Register Account"):
+                if new_user and new_email and new_pass:
+                    st.success("Account created successfully!")
+                    st.session_state.show_modal = None
+                    st.rerun()
+                else:
+                    st.error("Please fill in all fields.")
+        with col_b:
+            if st.button("Close"):
+                st.session_state.show_modal = None
+                st.rerun()
+
+# 4. HERO HEADING
+st.markdown('<p class="center-text">Where should we start ?</p>', unsafe_allow_html=True)
+
 # 5. CHAT INPUT & RESPONSE LOOP
 prompt = st.chat_input("Ask anything")
 
