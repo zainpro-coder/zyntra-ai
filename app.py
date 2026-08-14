@@ -97,12 +97,22 @@ if prompt:
             st.rerun()
     else:
         try:
-            # Initialize Client using new Google GenAI SDK
+            # Initialize client
             client = genai.Client(api_key=st.secrets["GOOGLE_API_KEY"])
             
-            # Using active model endpoint for Python 3.14+
+            # Fetch active models dynamically from your key
+            active_model = None
+            for m in client.models.list():
+                if "generateContent" in (m.supported_actions or []):
+                    active_model = m.name
+                    break
+            
+            # Fallback if list lookup fails
+            if not active_model:
+                active_model = "gemini-2.5-flash"
+
             response = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model=active_model,
                 contents=prompt,
             )
             
