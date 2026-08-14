@@ -100,49 +100,39 @@ if prompt:
         try:
             api_key = st.secrets["GOOGLE_API_KEY"]
             
-            # Step 1: Discover active models directly from Google
-            list_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-            list_res = requests.get(list_url).json()
+            # Target clean generation endpoints
+            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+            list_res = requests.get(url).json()
             
+            # Prioritize clean Gemini models over Gemma reasoning models
             valid_models = []
             if "models" in list_res:
                 for m in list_res["models"]:
-                    methods = m.get("supportedGenerationMethods", [])
-                    if "generateContent" in methods:
-                        # Exclude older deprecated flash variants
-                        name = m["name"].replace("models/", "")
-                        if "2.5-flash" not in name:
+                    name = m["name"].replace("models/", "")
+                    if "generateContent" in m.get("supportedGenerationMethods", []):
+                        if "gemma" not in name.lower() and "2.5-flash" not in name:
                             valid_models.append(name)
             
-            # Fallback list if discovery fails
             if not valid_models:
-                valid_models = ["gemini-1.5-flash-latest", "gemini-1.5-flash", "gemini-pro"]
-            
+                valid_models = ["gemini-1.5-flash", "gemini-pro"]
+
             reply = None
-            last_err = ""
-            
-            # Step 2: Try active endpoints
             for model_name in valid_models:
-                for version in ["v1", "v1beta"]:
-                    url = f"https://generativelanguage.googleapis.com/{version}/models/{model_name}:generateContent?key={api_key}"
-                    payload = {"contents": [{"parts": [{"text": prompt}]}]}
-                    
-                    res = requests.post(url, json=payload).json()
-                    
-                    if "candidates" in res:
-                        reply = res["candidates"][0]["content"]["parts"][0]["text"]
-                        break
-                    else:
-                        last_err = res.get("error", {}).get("message", "Request failed")
-                if reply:
+                endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": f"You are Zyntra AI, a helpful, fast, and polite AI assistant. Answer directly and cleanly without printing internal reasoning:\n\nUser: {prompt}"}]}]
+                }
+                res = requests.post(endpoint, json=payload).json()
+                if "candidates" in res:
+                    reply = res["candidates"][0]["content"]["parts"][0]["text"]
                     break
             
             if reply:
-                st.markdown(f"**Zyntra:** {reply}")
+                st.markdown(f"**Zyntra:**\n\n{reply}")
                 if not st.session_state.is_paid:
                     st.session_state.usage_count += 1
             else:
-                st.error(f"Google API Error: {last_err}")
+                st.error("Failed to generate response. Please try again.")
                 
         except Exception as e:
             st.error(f"Error: {e}")
