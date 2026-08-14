@@ -23,13 +23,11 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# 2. SESSION STATE LOGIC
+# 2. SESSION STATE FOR MODALS & CHAT HISTORY
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = None
-if "usage_count" not in st.session_state:
-    st.session_state.usage_count = 0
-if "is_paid" not in st.session_state:
-    st.session_state.is_paid = False
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 # 3. TOP RIGHT BUTTONS
 c1, c2, c3 = st.columns([8, 1, 1])
@@ -85,54 +83,43 @@ elif st.session_state.show_modal == "login":
 # 4. HERO HEADING
 st.markdown('<p class="center-text">Where should we start ?</p>', unsafe_allow_html=True)
 
-# 5. CHAT INPUT & RESPONSE
+# 5. CHAT INPUT & UNLIMITED RESPONSE LOOP
 prompt = st.chat_input("Ask anything")
 
 if prompt:
-    if not st.session_state.is_paid and st.session_state.usage_count >= 3:
-        st.warning("Free limit reached. Please pay via UPI to yourname@airtel and enter your secret code.")
-        code = st.text_input("Enter Access Code:", type="password")
-        if code == "ZEN2026":
-            st.session_state.is_paid = True
-            st.success("Unlocked! Please ask your question again.")
-            st.rerun()
-    else:
-        try:
-            api_key = st.secrets["GOOGLE_API_KEY"]
-            
-            # Target clean generation endpoints
-            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-            list_res = requests.get(url).json()
-            
-            # Prioritize clean Gemini models over Gemma reasoning models
-            valid_models = []
-            if "models" in list_res:
-                for m in list_res["models"]:
-                    name = m["name"].replace("models/", "")
-                    if "generateContent" in m.get("supportedGenerationMethods", []):
-                        if "gemma" not in name.lower() and "2.5-flash" not in name:
-                            valid_models.append(name)
-            
-            if not valid_models:
-                valid_models = ["gemini-1.5-flash", "gemini-pro"]
+    try:
+        api_key = st.secrets["GOOGLE_API_KEY"]
+        
+        # Discover clean models from your key
+        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+        list_res = requests.get(url).json()
+        
+        valid_models = []
+        if "models" in list_res:
+            for m in list_res["models"]:
+                name = m["name"].replace("models/", "")
+                if "generateContent" in m.get("supportedGenerationMethods", []):
+                    if "gemma" not in name.lower() and "2.5-flash" not in name:
+                        valid_models.append(name)
+        
+        if not valid_models:
+            valid_models = ["gemini-1.5-flash", "gemini-pro"]
 
-            reply = None
-            for model_name in valid_models:
-                endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": f"You are Zyntra AI, a helpful, fast, and polite AI assistant. Answer directly and cleanly without printing internal reasoning:\n\nUser: {prompt}"}]}]
-                }
-                res = requests.post(endpoint, json=payload).json()
-                if "candidates" in res:
-                    reply = res["candidates"][0]["content"]["parts"][0]["text"]
-                    break
+        reply = None
+        for model_name in valid_models:
+            endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": f"You are Zyntra AI, a helpful, fast, and polite AI assistant. Answer directly and cleanly without printing internal reasoning:\n\nUser: {prompt}"}]}]
+            }
+            res = requests.post(endpoint, json=payload).json()
+            if "candidates" in res:
+                reply = res["candidates"][0]["content"]["parts"][0]["text"]
+                break
+        
+        if reply:
+            st.markdown(f"**Zyntra:**\n\n{reply}")
+        else:
+            st.error("Failed to generate response. Please try again.")
             
-            if reply:
-                st.markdown(f"**Zyntra:**\n\n{reply}")
-                if not st.session_state.is_paid:
-                    st.session_state.usage_count += 1
-            else:
-                st.error("Failed to generate response. Please try again.")
-                
-        except Exception as e:
-            st.error(f"Error: {e}")
+    except Exception as e:
+        st.error(f"Error: {e}")
