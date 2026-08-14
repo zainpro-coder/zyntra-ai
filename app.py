@@ -31,7 +31,7 @@ if "user_name" not in st.session_state:
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = None
 
-# 3. SIDEBAR (CHATGPT STYLE: NEW CHAT, LIBRARY, ACCOUNT)
+# 3. SIDEBAR (CHATGPT STYLE)
 with st.sidebar:
     st.title("⚡ Zyntra AI")
     st.markdown('<p class="creator-badge">Created by <b>Mr. Mohammad Zain</b></p>', unsafe_allow_html=True)
@@ -90,7 +90,7 @@ for msg in current_messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 6. INPUT & CLEAN CONVERSATIONAL CALL
+# 6. INPUT & BULLETPROOF CHAT LOOP
 prompt = st.chat_input("Ask anything...")
 
 if prompt:
@@ -116,28 +116,27 @@ if prompt:
                             if "2.5-flash" not in name and "2.5-pro" not in name:
                                 candidate_models.append(name)
                 
-                # Format multi-turn chat history
-                contents_payload = []
-                for msg in current_messages:
-                    role_tag = "user" if msg["role"] == "user" else "model"
-                    contents_payload.append({
-                        "role": role_tag,
-                        "parts": [{"text": msg["content"]}]
-                    })
-                
-                system_text = (
-                    "You are Zyntra AI, a polished, witty, and concise AI assistant developed by Mr. Mohammad Zain. "
-                    "CRITICAL RULES: "
-                    "1. Respond directly like ChatGPT/Gemini. "
-                    "2. Never output your internal thinking, scratchpad, planning steps, or drafts. "
-                    "3. Keep answers crisp, clear, and to the point without unnecessary fluff. "
-                    "4. If the user engages casually (e.g. 'oh', 'cool', 'okay'), reply conversationally and naturally."
+                # Format conversations with clean prompt wrapping
+                system_rules = (
+                    "System Instruction: You are Zyntra AI, an intelligent, helpful, and concise AI assistant created by Mr. Mohammad Zain. "
+                    "Always respond directly, cleanly, and politely in the language the user speaks (Hindi/English/Hinglish). "
+                    "Do not print internal reasoning, chain-of-thought, or planning notes. "
+                    "If the user engages casually (e.g. 'oh', 'theek hai', 'achha'), respond naturally."
                 )
 
+                contents_payload = []
+                # Add context with system rules cleanly
+                for i, msg in enumerate(current_messages):
+                    role_tag = "user" if msg["role"] == "user" else "model"
+                    text_val = msg["content"]
+                    if i == 0 and role_tag == "user":
+                        text_val = f"[{system_rules}]\n\n{text_val}"
+                    contents_payload.append({
+                        "role": role_tag,
+                        "parts": [{"text": text_val}]
+                    })
+
                 payload = {
-                    "system_instruction": {
-                        "parts": [{"text": system_text}]
-                    },
                     "contents": contents_payload,
                     "generationConfig": {
                         "temperature": 0.7,
@@ -150,15 +149,15 @@ if prompt:
                 
                 for target_model in candidate_models:
                     gen_url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={api_key}"
-                    res = requests.post(gen_url, json=payload, timeout=25).json()
+                    res = requests.post(gen_url, json=payload, timeout=30).json()
                     
                     if "candidates" in res and len(res["candidates"]) > 0:
                         parts = res["candidates"][0].get("content", {}).get("parts", [])
                         if parts and "text" in parts[0]:
                             raw_text = parts[0]["text"]
-                            # Clean any leftover thinking tags or scratchpads
-                            cleaned_text = re.sub(r"<thought>.*?</thought>", "", raw_text, flags=re.DOTALL).strip()
-                            reply = cleaned_text if cleaned_text else raw_text
+                            # Strip out any lingering reasoning tokens if Gemma is hit
+                            cleaned = re.sub(r"<thought>.*?</thought>", "", raw_text, flags=re.DOTALL).strip()
+                            reply = cleaned if cleaned else raw_text
                             break
                     else:
                         last_err = res.get("error", {}).get("message", "")
