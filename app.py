@@ -70,7 +70,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 6. FAST AUTOMATIC WORKING MODEL CHAT
+# 6. FAST EXECUTION WITH EXTENDED TIMEOUT
 prompt = st.chat_input("Ask anything")
 
 if prompt:
@@ -79,13 +79,13 @@ if prompt:
         st.write(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("Zyntra is thinking..."):
             try:
                 api_key = st.secrets["GOOGLE_API_KEY"]
                 
-                # Fetch all active models on this key
+                # Fetch active models on this key
                 models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-                list_res = requests.get(models_url, timeout=5).json()
+                list_res = requests.get(models_url, timeout=10).json()
                 
                 candidate_models = []
                 if "models" in list_res:
@@ -93,7 +93,6 @@ if prompt:
                         name = m.get("name", "")
                         methods = m.get("supportedGenerationMethods", [])
                         
-                        # Only keep valid text generation models and skip deprecated ones
                         if "generateContent" in methods and "embedding" not in name:
                             if "2.5-flash" not in name and "2.5-pro" not in name:
                                 candidate_models.append(name)
@@ -101,16 +100,16 @@ if prompt:
                 reply = None
                 last_err = ""
                 
-                # Try candidate models until one generates the answer
+                # Try candidate models with generous 30s timeout
                 for target_model in candidate_models:
                     gen_url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={api_key}"
                     payload = {
                         "contents": [{
-                            "parts": [{"text": f"You are Zyntra AI, a helpful, fast, and polite AI assistant. Answer directly, concisely, and cleanly without printing internal reasoning steps:\n\nUser: {prompt}"}]
+                            "parts": [{"text": f"You are Zyntra AI, a helpful, fast, and polite AI assistant. Answer directly, concisely, and cleanly in the user's language without printing internal reasoning steps:\n\nUser: {prompt}"}]
                         }]
                     }
                     
-                    res = requests.post(gen_url, json=payload, timeout=8).json()
+                    res = requests.post(gen_url, json=payload, timeout=30).json()
                     
                     if "candidates" in res and len(res["candidates"]) > 0:
                         parts = res["candidates"][0].get("content", {}).get("parts", [])
@@ -124,7 +123,7 @@ if prompt:
                     st.write(reply)
                     st.session_state.messages.append({"role": "assistant", "content": reply})
                 else:
-                    st.error(f"Error: {last_err if last_err else 'No available model could generate a response.'}")
+                    st.error(f"Error: {last_err if last_err else 'Response took too long or model unavailable.'}")
                     
             except Exception as e:
                 st.error(f"Error: {e}")
