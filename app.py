@@ -70,7 +70,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 6. FAST CHAT EXECUTION
+# 6. FAST AUTOMATIC WORKING MODEL CHAT
 prompt = st.chat_input("Ask anything")
 
 if prompt:
@@ -82,37 +82,49 @@ if prompt:
         with st.spinner("Thinking..."):
             try:
                 api_key = st.secrets["GOOGLE_API_KEY"]
-                url = f"https://generativelanguage.googleapis.com/v1beta/interactions?key={api_key}"
                 
-                payload = {
-                    "model": "models/gemini-2.5-flash",
-                    "input": f"You are Zyntra AI, a helpful, fast, and polite AI assistant. Answer directly and cleanly:\n\nUser: {prompt}"
-                }
+                # Fetch all active models on this key
+                models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+                list_res = requests.get(models_url, timeout=5).json()
                 
-                res = requests.post(url, json=payload, timeout=12).json()
+                candidate_models = []
+                if "models" in list_res:
+                    for m in list_res["models"]:
+                        name = m.get("name", "")
+                        methods = m.get("supportedGenerationMethods", [])
+                        
+                        # Only keep valid text generation models and skip deprecated ones
+                        if "generateContent" in methods and "embedding" not in name:
+                            if "2.5-flash" not in name and "2.5-pro" not in name:
+                                candidate_models.append(name)
                 
-                # Check for output from Interactions API
                 reply = None
-                if "outputs" in res and len(res["outputs"]) > 0:
-                    first_out = res["outputs"][0]
-                    if isinstance(first_out, dict):
-                        reply = first_out.get("text") or first_out.get("content")
-                    elif isinstance(first_out, str):
-                        reply = first_out
-                elif "output" in res:
-                    if isinstance(res["output"], dict):
-                        reply = res["output"].get("text")
+                last_err = ""
+                
+                # Try candidate models until one generates the answer
+                for target_model in candidate_models:
+                    gen_url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={api_key}"
+                    payload = {
+                        "contents": [{
+                            "parts": [{"text": f"You are Zyntra AI, a helpful, fast, and polite AI assistant. Answer directly, concisely, and cleanly without printing internal reasoning steps:\n\nUser: {prompt}"}]
+                        }]
+                    }
+                    
+                    res = requests.post(gen_url, json=payload, timeout=8).json()
+                    
+                    if "candidates" in res and len(res["candidates"]) > 0:
+                        parts = res["candidates"][0].get("content", {}).get("parts", [])
+                        if parts and "text" in parts[0]:
+                            reply = parts[0]["text"]
+                            break
                     else:
-                        reply = res["output"]
-                elif "candidates" in res:
-                    reply = res["candidates"][0]["content"]["parts"][0]["text"]
+                        last_err = res.get("error", {}).get("message", "")
 
                 if reply:
                     st.write(reply)
                     st.session_state.messages.append({"role": "assistant", "content": reply})
                 else:
-                    err_msg = res.get("error", {}).get("message", "Could not parse response.")
-                    st.error(f"Error: {err_msg}")
+                    st.error(f"Error: {last_err if last_err else 'No available model could generate a response.'}")
                     
             except Exception as e:
                 st.error(f"Error: {e}")
