@@ -19,6 +19,13 @@ st.markdown("""
         text-align: center;
         margin-bottom: 20px;
     }
+    .attachment-container {
+        background-color: #1E232B;
+        padding: 15px;
+        border-radius: 12px;
+        margin-bottom: 15px;
+        border: 1px solid #2D3748;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -31,6 +38,10 @@ if "user_name" not in st.session_state:
     st.session_state.user_name = "Mohammad Zain"
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = None
+if "show_attachments" not in st.session_state:
+    st.session_state.show_attachments = False
+if "attachment_mode" not in st.session_state:
+    st.session_state.attachment_mode = None
 
 # 3. SIDEBAR (CHATGPT STYLE)
 with st.sidebar:
@@ -41,6 +52,8 @@ with st.sidebar:
         chat_id = f"Chat {len(st.session_state.conversations) + 1}"
         st.session_state.conversations[chat_id] = []
         st.session_state.active_chat = chat_id
+        st.session_state.show_attachments = False
+        st.session_state.attachment_mode = None
         st.rerun()
 
     st.markdown("---")
@@ -64,7 +77,7 @@ with st.sidebar:
     if st.button("Manage Account", use_container_width=True):
         st.session_state.show_modal = "account"
 
-# 4. MODAL POPUP
+# 4. USER MODAL POPUP
 if st.session_state.show_modal == "account":
     with st.expander("👤 User Profile & Settings", expanded=True):
         new_name = st.text_input("Display Name:", value=st.session_state.user_name)
@@ -85,7 +98,7 @@ current_messages = st.session_state.conversations[st.session_state.active_chat]
 
 if len(current_messages) == 0:
     st.markdown("<h1 style='text-align: center; margin-top: 20px;'>Where should we start?</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #9CA3AF;'>Ask questions, upload files, or take pictures for AI analysis.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #9CA3AF;'>Ask anything, brainstorm ideas, or click '+' to capture/upload.</p>", unsafe_allow_html=True)
 
 # Display historical messages of this conversation
 for msg in current_messages:
@@ -94,25 +107,56 @@ for msg in current_messages:
         if "image" in msg and msg["image"]:
             st.image(msg["image"], width=300)
 
-# 6. ATTACHMENT EXPANDER (FILES & CAMERA)
-with st.expander("📎 Upload Files / Capture Picture"):
-    col_up, col_cam = st.columns(2)
-    with col_up:
-        uploaded_file = st.file_uploader("Upload Image or Text File", type=["png", "jpg", "jpeg", "txt"], key="file_up")
-    with col_cam:
-        camera_file = st.camera_input("Take a Snapshot", key="cam_pic")
+# 6. ATTACHMENT (+) BAR & ON-DEMAND CAMERA/FILE SELECTOR
+col_plus, col_status = st.columns([1, 9])
+with col_plus:
+    if st.button("➕", help="Upload File or Open Camera", use_container_width=True):
+        st.session_state.show_attachments = not st.session_state.show_attachments
+        st.rerun()
 
-# Select attachment if any
-attached_file = uploaded_file or camera_file
+attached_file = None
+
+if st.session_state.show_attachments:
+    with st.container():
+        st.markdown("<div class='attachment-container'>", unsafe_allow_html=True)
+        col_btn1, col_btn2, col_btn3 = st.columns([2, 2, 1])
+        
+        with col_btn1:
+            if st.button("📁 Upload File / Image", use_container_width=True):
+                st.session_state.attachment_mode = "upload"
+                st.rerun()
+        with col_btn2:
+            if st.button("📸 Open Camera", use_container_width=True):
+                st.session_state.attachment_mode = "camera"
+                st.rerun()
+        with col_btn3:
+            if st.button("❌ Close", use_container_width=True):
+                st.session_state.show_attachments = False
+                st.session_state.attachment_mode = None
+                st.rerun()
+
+        # Conditionally render ONLY what user clicked
+        if st.session_state.attachment_mode == "upload":
+            uploaded_file = st.file_uploader("Select Image or Document", type=["png", "jpg", "jpeg", "txt"], key="active_file_uploader")
+            if uploaded_file:
+                attached_file = uploaded_file
+                st.success(f"Attached: {uploaded_file.name}")
+                
+        elif st.session_state.attachment_mode == "camera":
+            camera_file = st.camera_input("Click 'Take Photo' when ready", key="active_camera_input")
+            if camera_file:
+                attached_file = camera_file
+                st.success("Snapshot captured!")
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # 7. INPUT & MULTIMODAL GEMINI EXECUTION
 prompt = st.chat_input("Ask anything...")
 
 if prompt:
     user_msg_entry = {"role": "user", "content": prompt}
-    
-    # Process image if attached
     image_parts = []
+    
     if attached_file:
         file_bytes = attached_file.getvalue()
         mime_type = attached_file.type or "image/jpeg"
@@ -137,12 +181,15 @@ if prompt:
         if "image" in user_msg_entry:
             st.image(user_msg_entry["image"], width=300)
 
+    # Reset attachment panel after sending
+    st.session_state.show_attachments = False
+    st.session_state.attachment_mode = None
+
     with st.chat_message("assistant"):
         with st.spinner("Zyntra is thinking & analyzing..."):
             try:
                 api_key = st.secrets["GOOGLE_API_KEY"]
                 
-                # Fetch active models
                 models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
                 list_res = requests.get(models_url, timeout=5).json()
                 
@@ -167,7 +214,7 @@ if prompt:
                 system_rules = (
                     "You are Zyntra AI, an intelligent, helpful AI assistant created and developed by Mr. Mohammad Zain. "
                     "Always reply directly, politely, and cleanly in the user's language (Hindi/English/Hinglish). "
-                    "When given an image, inspect it carefully and describe or answer the user's question about it accurately. "
+                    "When given an image, inspect it carefully and answer accurately. "
                     "Do not print internal reasoning thoughts or drafts. Output only the final response."
                 )
 
@@ -180,7 +227,6 @@ if prompt:
                     if i == 0 and role_tag == "user":
                         parts[0]["text"] = f"[{system_rules}]\n\n{parts[0]['text']}"
                     
-                    # Attach the image to the current user turn
                     if i == len(recent_history) - 1 and image_parts:
                         parts = image_parts + parts
                         
