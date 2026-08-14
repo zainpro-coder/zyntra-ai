@@ -11,7 +11,7 @@ if "show_modal" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# 3. FAST CACHED MODEL FINDER (Runs only ONCE on startup)
+# 3. FAST CACHED MODEL FINDER (Filters out deprecated 2.5-flash)
 @st.cache_data(ttl=3600)
 def get_best_model(api_key):
     try:
@@ -21,9 +21,11 @@ def get_best_model(api_key):
             for m in res["models"]:
                 name = m.get("name", "")
                 methods = m.get("supportedGenerationMethods", [])
-                # Pick the first valid text generation model
+                
+                # Exclude deprecated model names and embeddings
                 if "generateContent" in methods and "embedding" not in name:
-                    return name
+                    if name != "models/gemini-2.5-flash":
+                        return name
     except Exception:
         pass
     return "models/gemini-1.5-flash-8b"
@@ -87,7 +89,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 7. CHAT INPUT & FAST EXECUTION
+# 7. CHAT INPUT & EXECUTION
 prompt = st.chat_input("Ask anything")
 
 if prompt:
