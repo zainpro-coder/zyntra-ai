@@ -70,50 +70,33 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 6. CHAT INPUT & DIRECT GEMINI API CALL
+# 6. FAST CHAT INPUT
 prompt = st.chat_input("Ask anything")
 
 if prompt:
-    # Display user query
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.write(prompt)
 
-    try:
-        api_key = st.secrets["GOOGLE_API_KEY"]
-        
-        # Discover working models
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-        list_res = requests.get(url).json()
-        
-        valid_models = []
-        if "models" in list_res:
-            for m in list_res["models"]:
-                name = m["name"].replace("models/", "")
-                if "generateContent" in m.get("supportedGenerationMethods", []):
-                    if "gemma" not in name.lower() and "2.5-flash" not in name:
-                        valid_models.append(name)
-        
-        if not valid_models:
-            valid_models = ["gemini-1.5-flash", "gemini-pro"]
-
-        reply = None
-        for model_name in valid_models:
-            endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": f"You are Zyntra AI. Give a direct, helpful and clean answer:\n\nUser: {prompt}"}]}]
-            }
-            res = requests.post(endpoint, json=payload).json()
-            if "candidates" in res:
-                reply = res["candidates"][0]["content"]["parts"][0]["text"]
-                break
-        
-        if reply:
-            with st.chat_message("assistant"):
-                st.write(reply)
-            st.session_state.messages.append({"role": "assistant", "content": reply})
-        else:
-            st.error("Failed to generate response. Please try again.")
-            
-    except Exception as e:
-        st.error(f"Error: {e}")
+    with st.chat_message("assistant"):
+        with st.spinner("Thinking..."):
+            try:
+                api_key = st.secrets["GOOGLE_API_KEY"]
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+                
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}]
+                }
+                
+                res = requests.post(url, json=payload).json()
+                
+                if "candidates" in res:
+                    reply = res["candidates"][0]["content"]["parts"][0]["text"]
+                    st.write(reply)
+                    st.session_state.messages.append({"role": "assistant", "content": reply})
+                else:
+                    err_msg = res.get("error", {}).get("message", "API error occurred.")
+                    st.error(f"Error: {err_msg}")
+                    
+            except Exception as e:
+                st.error(f"Error: {e}")
