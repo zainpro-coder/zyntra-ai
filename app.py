@@ -31,25 +31,7 @@ if "user_name" not in st.session_state:
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = None
 
-# 3. CACHED FAST MODEL RESOLVER (Runs only once on startup)
-@st.cache_data(ttl=3600)
-def get_fastest_model(api_key):
-    try:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-        res = requests.get(url, timeout=5).json()
-        if "models" in res:
-            for m in res["models"]:
-                name = m.get("name", "")
-                methods = m.get("supportedGenerationMethods", [])
-                # Filter out Gemma, Embeddings, and deprecated models
-                if "generateContent" in methods and "embedding" not in name:
-                    if "gemma" not in name.lower() and "2.5-flash" not in name and "2.5-pro" not in name:
-                        return name
-    except Exception:
-        pass
-    return "models/gemini-1.5-flash-8b"
-
-# 4. SIDEBAR (CHATGPT STYLE)
+# 3. SIDEBAR (CHATGPT STYLE)
 with st.sidebar:
     st.title("⚡ Zyntra AI")
     st.markdown('<p class="creator-badge">Created by <b>Mr. Mohammad Zain</b></p>', unsafe_allow_html=True)
@@ -81,7 +63,7 @@ with st.sidebar:
     if st.button("Manage Account", use_container_width=True):
         st.session_state.show_modal = "account"
 
-# 5. MODAL POPUP
+# 4. MODAL POPUP
 if st.session_state.show_modal == "account":
     with st.expander("👤 User Profile & Settings", expanded=True):
         new_name = st.text_input("Display Name:", value=st.session_state.user_name)
@@ -97,7 +79,7 @@ if st.session_state.show_modal == "account":
                 st.session_state.show_modal = None
                 st.rerun()
 
-# 6. MAIN CHAT AREA
+# 5. MAIN CHAT AREA
 current_messages = st.session_state.conversations[st.session_state.active_chat]
 
 if len(current_messages) == 0:
@@ -108,7 +90,7 @@ for msg in current_messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 7. FAST CHAT INPUT
+# 6. FAST INPUT WITH AUTOMATIC LOAD-BALANCED FALLBACK
 prompt = st.chat_input("Ask anything...")
 
 if prompt:
@@ -120,15 +102,37 @@ if prompt:
         with st.spinner("Zyntra is typing..."):
             try:
                 api_key = st.secrets["GOOGLE_API_KEY"]
-                active_model = get_fastest_model(api_key)
                 
+                # Fetch available text models dynamically
+                models_url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+                list_res = requests.get(models_url, timeout=5).json()
+                
+                candidate_models = []
+                if "models" in list_res:
+                    for m in list_res["models"]:
+                        name = m.get("name", "")
+                        methods = m.get("supportedGenerationMethods", [])
+                        if "generateContent" in methods and "embedding" not in name:
+                            if "gemma" not in name.lower() and "2.5-flash" not in name and "2.5-pro" not in name:
+                                candidate_models.append(name)
+                
+                # Verified list of stable models in order of priority
+                fallback_list = candidate_models + [
+                    "models/gemini-1.5-flash-8b",
+                    "models/gemini-1.5-flash",
+                    "models/gemini-1.5-pro"
+                ]
+                
+                # Deduplicate while keeping order
+                seen = set()
+                final_models = [x for x in fallback_list if not (x in seen or seen.add(x))]
+
                 system_rules = (
                     "You are Zyntra AI, a lightning-fast, polite, and intelligent AI assistant developed by Mr. Mohammad Zain. "
-                    "Always reply directly, cleanly, and helpfully in the language the user speaks. "
-                    "Do not print internal reasoning, thought scratchpads, or bullet drafts. Output only the final response."
+                    "Always reply directly, cleanly, and helpfully in the language the user speaks (Hindi/English/Hinglish). "
+                    "Do not print internal reasoning or thought scratchpads. Output only the final clean response."
                 )
 
-                # Keep last 6 messages to stay fast and responsive
                 recent_history = current_messages[-6:]
                 contents_payload = []
                 for i, msg in enumerate(recent_history):
@@ -149,22 +153,32 @@ if prompt:
                     }
                 }
 
-                gen_url = f"https://generativelanguage.googleapis.com/v1beta/{active_model}:generateContent?key={api_key}"
-                res = requests.post(gen_url, json=payload, timeout=20).json()
-                
                 reply = None
-                if "candidates" in res and len(res["candidates"]) > 0:
-                    parts = res["candidates"][0].get("content", {}).get("parts", [])
-                    if parts and "text" in parts[0]:
-                        raw_text = parts[0]["text"]
-                        reply = re.sub(r"<thought>.*?</thought>", "", raw_text, flags=re.DOTALL).strip()
+                last_err = ""
+                
+                # Iterate through models: if one is high demand / busy, try the next instantly
+                for model_choice in final_models:
+                    gen_url = f"https://generativelanguage.googleapis.com/v1beta/{model_choice}:generateContent?key={api_key}"
+                    try:
+                        res = requests.post(gen_url, json=payload, timeout=12).json()
+                        if "candidates" in res and len(res["candidates"]) > 0:
+                            parts = res["candidates"][0].get("content", {}).get("parts", [])
+                            if parts and "text" in parts[0]:
+                                raw_text = parts[0]["text"]
+                                reply = re.sub(r"<thought>.*?</thought>", "", raw_text, flags=re.DOTALL).strip()
+                                break
+                        else:
+                            err_text = res.get("error", {}).get("message", "")
+                            # If high demand or not found, silently proceed to the next fallback model
+                            last_err = err_text
+                    except Exception:
+                        continue
                 
                 if reply:
                     st.write(reply)
                     current_messages.append({"role": "assistant", "content": reply})
                 else:
-                    err_msg = res.get("error", {}).get("message", "API response error.")
-                    st.error(f"Error: {err_msg}")
+                    st.error(f"Error: {last_err if last_err else 'All models currently busy. Please try in a moment.'}")
                     
             except Exception as e:
                 st.error(f"Error: {e}")
