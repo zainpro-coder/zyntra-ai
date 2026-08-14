@@ -70,7 +70,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
 
-# 6. FAST EXECUTION WITH EXTENDED TIMEOUT
+# 6. FAST EXECUTION WITH SYSTEM IDENTITY (CREATOR: MR. MOHAMMAD ZAIN)
 prompt = st.chat_input("Ask anything")
 
 if prompt:
@@ -100,12 +100,19 @@ if prompt:
                 reply = None
                 last_err = ""
                 
-                # Try candidate models with generous 30s timeout
+                # System prompt specifying creator identity
+                system_instruction = (
+                    "You are Zyntra AI, an intelligent, fast, and polite AI assistant created and developed by Mr. Mohammad Zain. "
+                    "Whenever asked about your creator, developer, founder, or who made you, always state clearly and respectfully that you were created by Mr. Mohammad Zain. "
+                    "Always answer directly, politely, and cleanly in the user's language without showing internal reasoning steps."
+                )
+                
+                # Try candidate models
                 for target_model in candidate_models:
                     gen_url = f"https://generativelanguage.googleapis.com/v1beta/{target_model}:generateContent?key={api_key}"
                     payload = {
                         "contents": [{
-                            "parts": [{"text": f"You are Zyntra AI, a helpful, fast, and polite AI assistant. Answer directly, concisely, and cleanly in the user's language without printing internal reasoning steps:\n\nUser: {prompt}"}]
+                            "parts": [{"text": f"{system_instruction}\n\nUser Question: {prompt}"}]
                         }]
                     }
                     
