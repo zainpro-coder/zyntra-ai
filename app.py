@@ -19,17 +19,9 @@ st.markdown("""
         text-align: center;
         margin-bottom: 20px;
     }
-    /* Fixed Dock for Attachments right above input */
-    .attachment-popup {
-        background-color: #1E232B;
-        border: 1px solid #374151;
-        border-radius: 12px;
-        padding: 15px;
-        margin-bottom: 12px;
-    }
-    /* Sticky Bottom Action Row */
-    .stChatInput {
-        padding-bottom: 10px;
+    /* Keep main container spaced nicely from bottom bar */
+    .main .block-container {
+        padding-bottom: 80px;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -43,10 +35,6 @@ if "user_name" not in st.session_state:
     st.session_state.user_name = "Mohammad Zain"
 if "show_modal" not in st.session_state:
     st.session_state.show_modal = None
-if "show_attachments" not in st.session_state:
-    st.session_state.show_attachments = False
-if "attachment_mode" not in st.session_state:
-    st.session_state.attachment_mode = None
 if "staged_file" not in st.session_state:
     st.session_state.staged_file = None
 
@@ -59,8 +47,6 @@ with st.sidebar:
         chat_id = f"Chat {len(st.session_state.conversations) + 1}"
         st.session_state.conversations[chat_id] = []
         st.session_state.active_chat = chat_id
-        st.session_state.show_attachments = False
-        st.session_state.attachment_mode = None
         st.session_state.staged_file = None
         st.rerun()
 
@@ -105,69 +91,42 @@ if st.session_state.show_modal == "account":
 current_messages = st.session_state.conversations[st.session_state.active_chat]
 
 if len(current_messages) == 0:
-    st.markdown("<h1 style='text-align: center; margin-top: 20px;'>Where should we start?</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center; color: #9CA3AF;'>Ask anything, brainstorm ideas, or click '+' at the bottom to attach files/photos.</p>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center; margin-top: 30px;'>Where should we start?</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #9CA3AF;'>Ask anything, brainstorm ideas, or click '+' to attach files/photos.</p>", unsafe_allow_html=True)
 
-# Display historical messages of this conversation
+# Display historical messages
 for msg in current_messages:
     with st.chat_message(msg["role"]):
         st.write(msg["content"])
         if "image" in msg and msg["image"]:
             st.image(msg["image"], width=300)
 
-# 6. ATTACHMENT POPUP DRAWER (APPEARS ON CLICKING `+`)
-if st.session_state.show_attachments:
-    with st.container():
-        st.markdown("<div class='attachment-popup'>", unsafe_allow_html=True)
-        col_m1, col_m2, col_m3 = st.columns([2, 2, 1])
-        with col_m1:
-            if st.button("📁 Upload Image/Doc", use_container_width=True):
-                st.session_state.attachment_mode = "upload"
-                st.rerun()
-        with col_m2:
-            if st.button("📸 Capture Camera Photo", use_container_width=True):
-                st.session_state.attachment_mode = "camera"
-                st.rerun()
-        with col_m3:
-            if st.button("❌ Close", use_container_width=True):
-                st.session_state.show_attachments = False
-                st.session_state.attachment_mode = None
-                st.rerun()
+# 6. SLEEK POPOVER '+' ATTACHMENT MENU (Never breaks layout)
+with st.popover("➕ Add Attachment (Photo / File)"):
+    tab1, tab2 = st.tabs(["📁 Upload File", "📸 Camera"])
+    with tab1:
+        up_file = st.file_uploader("Choose an image or text file", type=["png", "jpg", "jpeg", "txt"], key="pop_uploader")
+        if up_file:
+            st.session_state.staged_file = up_file
+            st.success(f"Selected: {up_file.name}")
+    with tab2:
+        cam_file = st.camera_input("Take photo", key="pop_cam")
+        if cam_file:
+            st.session_state.staged_file = cam_file
+            st.success("Snapshot captured!")
 
-        if st.session_state.attachment_mode == "upload":
-            up_file = st.file_uploader("Select File", type=["png", "jpg", "jpeg", "txt"], key="dock_file_uploader")
-            if up_file:
-                st.session_state.staged_file = up_file
-                st.success(f"Attached: {up_file.name}")
-        elif st.session_state.attachment_mode == "camera":
-            cam_file = st.camera_input("Click 'Take Photo' below", key="dock_camera_input")
-            if cam_file:
-                st.session_state.staged_file = cam_file
-                st.success("Photo Ready to Send!")
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-# Show attached indicator if a file is staged
+# Show badge if attachment is ready
 if st.session_state.staged_file:
-    st.info(f"📎 1 attachment ready. Type your prompt below and hit send.")
+    st.caption(f"📎 **Attached:** {getattr(st.session_state.staged_file, 'name', 'Camera Snapshot')}")
 
-# 7. BOTTOM CHAT BAR WITH INTEGRATED '+' BUTTON
-col_action, col_input = st.columns([1, 15])
-
-with col_action:
-    if st.button("➕", help="Attach File or Open Camera", use_container_width=True):
-        st.session_state.show_attachments = not st.session_state.show_attachments
-        st.rerun()
-
-with col_input:
-    prompt = st.chat_input("Ask anything...")
+# 7. NATURAL FIXED BOTTOM CHAT INPUT
+prompt = st.chat_input("Ask anything...")
 
 # 8. MULTIMODAL GEMINI EXECUTION
 if prompt:
     user_msg_entry = {"role": "user", "content": prompt}
     image_parts = []
     
-    # Process staged file if present
     if st.session_state.staged_file:
         raw_attachment = st.session_state.staged_file
         file_bytes = raw_attachment.getvalue()
@@ -184,7 +143,7 @@ if prompt:
             })
         elif mime_type == "text/plain":
             file_text = file_bytes.decode("utf-8", errors="ignore")
-            prompt = f"Attached Document Content:\n```\n{file_text}\n```\n\nUser Question: {prompt}"
+            prompt = f"Attached Document:\n```\n{file_text}\n```\n\nQuestion: {prompt}"
             user_msg_entry["content"] = prompt
 
     current_messages.append(user_msg_entry)
@@ -193,13 +152,11 @@ if prompt:
         if "image" in user_msg_entry:
             st.image(user_msg_entry["image"], width=300)
 
-    # Clear staged attachments
+    # Clear staged attachment
     st.session_state.staged_file = None
-    st.session_state.show_attachments = False
-    st.session_state.attachment_mode = None
 
     with st.chat_message("assistant"):
-        with st.spinner("Zyntra is thinking & analyzing..."):
+        with st.spinner("Zyntra is typing..."):
             try:
                 api_key = st.secrets["GOOGLE_API_KEY"]
                 
@@ -227,7 +184,7 @@ if prompt:
                 system_rules = (
                     "You are Zyntra AI, an intelligent, helpful AI assistant created and developed by Mr. Mohammad Zain. "
                     "Always reply directly, politely, and cleanly in the user's language (Hindi/English/Hinglish). "
-                    "When given an image or document, inspect it thoroughly and answer accurately. "
+                    "When given an image or file, analyze it carefully. "
                     "Do not print internal reasoning thoughts or drafts. Output only the final response."
                 )
 
